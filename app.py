@@ -5,58 +5,38 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model
 import pickle
 
-# Set Page Title
-st.set_config(page_title="Baby Cry Analyzer", page_icon="👶")
+st.set_page_config(page_title="Baby Cry Analyzer", page_icon="👶")
 
-st.title("👶 Infant Cry Classification System")
-st.markdown("---")
+st.title("👶 Infant Cry Classification")
 
-# --- 1. Load the Model and Encoder ---
+# This helps the app load MUCH faster
 @st.cache_resource
-def load_assets():
-    try:
-        # Load the Neural Network
-        model = load_model('infant_cry_classification_model.h5')
-        # Load the Label Translator
-        with open('label_encoder.pkl', 'rb') as f:
-            encoder = pickle.load(f)
-        return model, encoder
-    except Exception as e:
-        st.error(f"Error loading assets: {e}")
-        return None, None
+def load_my_model():
+    model = load_model('infant_cry_classification_model.h5')
+    with open('label_encoder.pkl', 'rb') as f:
+        encoder = pickle.load(f)
+    return model, encoder
 
-with st.spinner('Loading AI Model... Please wait.'):
-    model, encoder = load_assets()
+# Try to load the model
+try:
+    model, encoder = load_my_model()
+    st.success("AI Brain Ready!")
+except Exception as e:
+    st.error("Still loading components... please wait 2 minutes.")
+    st.stop()
 
-# --- 2. Feature Extraction Function ---
-def extract_features(audio_file):
-    # This matches the 40 MFCCs used in your training
-    audio, sample_rate = librosa.load(audio_file, res_type='kaiser_fast')
-    mfccs_features = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=40)
-    mfccs_scaled_features = np.mean(mfccs_features.T, axis=0)
-    return mfccs_scaled_features.reshape(1, -1)
+# File Uploader
+uploaded_file = st.file_uploader("Upload Baby Cry (.wav)", type=["wav"])
 
-# --- 3. User Interface ---
-if model is not None:
-    st.write("### Step 1: Upload a Cry Sound")
-    uploaded_file = st.file_uploader("Upload .wav file", type=["wav"])
-
-    if uploaded_file is not None:
-        st.audio(uploaded_file, format='audio/wav')
+if uploaded_file:
+    st.audio(uploaded_file)
+    if st.button("Analyze Cry"):
+        # Processing
+        audio, sr = librosa.load(uploaded_file, res_type='kaiser_fast')
+        mfccs = np.mean(librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=40).T, axis=0)
         
-        if st.button('Analyze This Cry'):
-            with st.spinner('Analyzing acoustic patterns...'):
-                # Process and Predict
-                features = extract_features(uploaded_file)
-                prediction_logits = model.predict(features)
-                prediction_class = np.argmax(prediction_logits, axis=1)
-                
-                # Decode and Show Result
-                result = encoder.inverse_transform(prediction_class)[0]
-                
-                st.markdown("---")
-                st.success(f"## Final Prediction: {result}")
-                st.info("This classification is based on the acoustic fingerprint of the audio.")
-
-st.markdown("---")
-st.caption("Developed for Infant Cry Classification Project - Powered by TensorFlow & Librosa")
+        # Prediction
+        prediction = model.predict(mfccs.reshape(1, -1))
+        label = encoder.inverse_transform([np.argmax(prediction)])[0]
+        
+        st.header(f"Result: {label}")
