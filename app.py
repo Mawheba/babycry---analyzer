@@ -6,68 +6,59 @@ from tensorflow.keras.models import load_model
 import pickle
 import os
 
-# Page Config
-st.set_page_config(page_title="Infant Cry Analyzer", page_icon="👶")
+st.set_page_config(page_title="Infant Cry AI", page_icon="👶")
 
 st.title("👶 Infant Cry Classification System")
-st.write("Upload a baby cry sound file (.wav) to analyze the cause.")
+st.markdown("---")
 
-# --- Background AI Loading ---
+# 1. Load Assets with Error Reporting
 @st.cache_resource
-def load_ai_model():
+def load_assets():
     try:
-        # Verify files exist
-        model_path = 'infant_cry_classification_model.h5'
-        pickle_path = 'label_encoder.pkl'
+        if not os.path.exists('infant_cry_classification_model.h5'):
+            return None, None, "File Not Found: infant_cry_classification_model.h5"
         
-        if not os.path.exists(model_path) or not os.path.exists(pickle_path):
-            return None, "Model or Encoder file missing in GitHub repository."
+        model = load_model('infant_cry_classification_model.h5')
         
-        # Load the Neural Network
-        model = load_model(model_path)
-        # Load the Label Translator
-        with open(pickle_path, 'rb') as f:
+        with open('label_encoder.pkl', 'rb') as f:
             encoder = pickle.load(f)
-        return (model, encoder), "Success"
+            
+        return model, encoder, "Success"
     except Exception as e:
-        return None, str(e)
+        return None, None, str(e)
 
-# Start Loading
-data, message = load_ai_model()
+model, encoder, status = load_assets()
 
-# --- User Interface Logic ---
-if data is None:
-    st.error(f"Initialization Error: {message}")
-    st.info("Please ensure your .h5 and .pkl files are uploaded to GitHub.")
+# 2. Interface Logic
+if model is None:
+    st.error(f"Engine Error: {status}")
+    st.info("Ensure your .h5 and .pkl files are in the main folder on GitHub.")
 else:
-    model, encoder = data
-    st.success("AI Brain Connected!")
+    st.success("AI Brain Connected & Ready!")
+    
+    file = st.file_uploader("Upload Baby Cry (.wav)", type=["wav"])
 
-    # Step 1: Input
-    uploaded_file = st.file_uploader("Upload Baby Cry (.wav)", type=["wav"])
-
-    if uploaded_file is not None:
-        st.audio(uploaded_file)
+    if file is not None:
+        st.audio(file)
         
-        # Step 2: Process & Output
-        if st.button("Analyze Cry Patterns"):
-            with st.spinner("Extracting acoustic fingerprints..."):
-                # 1. Load audio
-                audio, sr = librosa.load(uploaded_file, res_type='kaiser_fast')
-                # 2. Extract 40 MFCCs (The Feature Vector)
-                mfccs = np.mean(librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=40).T, axis=0)
-                # 3. Reshape for the model
-                features = mfccs.reshape(1, -1)
-                
-                # 4. Predict
-                prediction = model.predict(features)
-                class_index = np.argmax(prediction)
-                result = encoder.inverse_transform([class_index])[0]
-                
-                # Show Result
-                st.markdown("---")
-                st.header(f"Result: {result}")
-                st.balloons()
+        if st.button("Classify This Cry"):
+            try:
+                with st.spinner("Analyzing acoustic features..."):
+                    # Feature Extraction
+                    audio, sr = librosa.load(file, res_type='kaiser_fast')
+                    mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=40)
+                    mfccs_processed = np.mean(mfccs.T, axis=0).reshape(1, -1)
+                    
+                    # Prediction
+                    prediction = model.predict(mfccs_processed)
+                    class_idx = np.argmax(prediction)
+                    label = encoder.inverse_transform([class_idx])[0]
+                    
+                    st.markdown("---")
+                    st.header(f"Result: {label}")
+                    st.balloons()
+            except Exception as e:
+                st.error(f"Analysis Failed: {e}")
 
 st.markdown("---")
-st.caption("Technical Details: Uses a Deep Neural Network with 40-dimensional MFCC feature extraction.")
+st.caption("v2.0 - Final Deployment Stable Build")
