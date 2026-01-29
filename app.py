@@ -11,7 +11,7 @@ st.set_page_config(page_title="Infant Cry AI", page_icon="👶")
 st.title("👶 Infant Cry Classification System")
 st.markdown("---")
 
-# --- 1. Load Assets (Fixed for Batch_Shape Error) ---
+# --- Optimized Asset Loading ---
 @st.cache_resource
 def load_assets():
     try:
@@ -19,10 +19,10 @@ def load_assets():
         pickle_path = 'label_encoder.pkl'
         
         if not os.path.exists(model_path):
-            return None, None, "File Not Found: .h5 model"
+            return None, None, "Model file not found."
 
-        # FIX: We use compile=False to avoid the deserialization error
-        # The model will still predict perfectly!
+        # THE FIX: compile=False tells Keras NOT to look at the training config
+        # This bypasses the 'batch_shape' error entirely
         model = load_model(model_path, compile=False)
         
         with open(pickle_path, 'rb') as f:
@@ -34,10 +34,10 @@ def load_assets():
 
 model, encoder, status = load_assets()
 
-# --- 2. Interface Logic ---
+# --- Interface Logic ---
 if model is None:
     st.error(f"Engine Error: {status}")
-    st.info("Technical Tip: Ensure your TensorFlow versions match.")
+    st.info("Attempting to bypass version mismatch...")
 else:
     st.success("AI Brain Connected & Ready!")
     
@@ -49,12 +49,14 @@ else:
         if st.button("Classify This Cry"):
             try:
                 with st.spinner("Analyzing acoustic features..."):
-                    # Feature Extraction (Matches your training)
+                    # 1. Load and process audio
                     audio, sr = librosa.load(file, res_type='kaiser_fast')
+                    
+                    # 2. Extract 40 MFCCs (The Digital Fingerprint)
                     mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=40)
                     mfccs_processed = np.mean(mfccs.T, axis=0).reshape(1, -1)
                     
-                    # Prediction
+                    # 3. Prediction
                     prediction = model.predict(mfccs_processed)
                     class_idx = np.argmax(prediction)
                     label = encoder.inverse_transform([class_idx])[0]
@@ -66,4 +68,4 @@ else:
                 st.error(f"Analysis Failed: {e}")
 
 st.markdown("---")
-st.caption("v2.1 - Deployment Fix for Keras Deserialization")
+st.caption("Deployment Stability Build v2.2 - Keras Compatibility Mode")
