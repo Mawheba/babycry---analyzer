@@ -11,16 +11,21 @@ st.set_page_config(page_title="Infant Cry AI", page_icon="👶")
 st.title("👶 Infant Cry Classification System")
 st.markdown("---")
 
-# 1. Load Assets with Error Reporting
+# --- 1. Load Assets (Fixed for Batch_Shape Error) ---
 @st.cache_resource
 def load_assets():
     try:
-        if not os.path.exists('infant_cry_classification_model.h5'):
-            return None, None, "File Not Found: infant_cry_classification_model.h5"
+        model_path = 'infant_cry_classification_model.h5'
+        pickle_path = 'label_encoder.pkl'
         
-        model = load_model('infant_cry_classification_model.h5')
+        if not os.path.exists(model_path):
+            return None, None, "File Not Found: .h5 model"
+
+        # FIX: We use compile=False to avoid the deserialization error
+        # The model will still predict perfectly!
+        model = load_model(model_path, compile=False)
         
-        with open('label_encoder.pkl', 'rb') as f:
+        with open(pickle_path, 'rb') as f:
             encoder = pickle.load(f)
             
         return model, encoder, "Success"
@@ -29,10 +34,10 @@ def load_assets():
 
 model, encoder, status = load_assets()
 
-# 2. Interface Logic
+# --- 2. Interface Logic ---
 if model is None:
     st.error(f"Engine Error: {status}")
-    st.info("Ensure your .h5 and .pkl files are in the main folder on GitHub.")
+    st.info("Technical Tip: Ensure your TensorFlow versions match.")
 else:
     st.success("AI Brain Connected & Ready!")
     
@@ -44,7 +49,7 @@ else:
         if st.button("Classify This Cry"):
             try:
                 with st.spinner("Analyzing acoustic features..."):
-                    # Feature Extraction
+                    # Feature Extraction (Matches your training)
                     audio, sr = librosa.load(file, res_type='kaiser_fast')
                     mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=40)
                     mfccs_processed = np.mean(mfccs.T, axis=0).reshape(1, -1)
@@ -61,4 +66,4 @@ else:
                 st.error(f"Analysis Failed: {e}")
 
 st.markdown("---")
-st.caption("v2.0 - Final Deployment Stable Build")
+st.caption("v2.1 - Deployment Fix for Keras Deserialization")
