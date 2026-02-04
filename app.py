@@ -16,11 +16,10 @@ def load_assets():
         pickle_path = 'label_encoder.pkl'
         
         if not os.path.exists(model_path):
-            return None, None, "Model file not found."
+            return None, None, "Model file not found in GitHub."
 
-        # THE FINAL FIX: 
-        # Using custom_objects can sometimes bypass deserialization errors.
-        # If this fails, we use a raw loading approach.
+        # THE FINAL BYPASS: safe_mode=False allows Keras 3 to attempt 
+        # a legacy load of a Keras 2 file structure.
         model = load_model(model_path, compile=False, safe_mode=False)
         
         with open(pickle_path, 'rb') as f:
@@ -34,15 +33,23 @@ model, encoder, status = load_assets()
 
 if model is None:
     st.error(f"Engine Error: {status}")
-    st.info("If you see 'batch_shape' error, we will try one last technical bypass.")
+    st.info("If you see 'batch_shape', the system is still using Keras 3. See reboot steps below.")
 else:
     st.success("AI Brain Connected!")
-    file = st.file_uploader("Upload .wav", type=["wav"])
+    file = st.file_uploader("Upload .wav recording", type=["wav"])
+    
     if file:
         st.audio(file)
-        if st.button("Analyze"):
-            audio, sr = librosa.load(file, res_type='kaiser_fast')
-            mfccs = np.mean(librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=40).T, axis=0).reshape(1, -1)
-            prediction = model.predict(mfccs)
-            label = encoder.inverse_transform([np.argmax(prediction)])[0]
-            st.header(f"Result: {label}")
+        if st.button("Analyze Cry"):
+            with st.spinner("Extracting acoustic features..."):
+                # Audio Processing: 40 MFCCs
+                audio, sr = librosa.load(file, res_type='kaiser_fast')
+                mfccs = np.mean(librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=40).T, axis=0).reshape(1, -1)
+                
+                # Prediction
+                prediction = model.predict(mfccs)
+                label = encoder.inverse_transform([np.argmax(prediction)])[0]
+                
+                st.markdown("---")
+                st.header(f"Result: {label}")
+                st.balloons()
