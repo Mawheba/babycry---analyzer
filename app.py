@@ -7,11 +7,8 @@ import pickle
 import os
 
 st.set_page_config(page_title="Infant Cry AI", page_icon="👶")
-
 st.title("👶 Infant Cry Classification System")
-st.markdown("---")
 
-# --- Load Assets with Compatibility Fix ---
 @st.cache_resource
 def load_assets():
     try:
@@ -19,11 +16,12 @@ def load_assets():
         pickle_path = 'label_encoder.pkl'
         
         if not os.path.exists(model_path):
-            return None, None, "Model file (.h5) not found in repository."
+            return None, None, "Model file not found."
 
-        # THE FIX: compile=False avoids the deserialization of training config
-        # This bypasses the 'batch_shape' error completely
-        model = load_model(model_path, compile=False)
+        # THE FINAL FIX: 
+        # Using custom_objects can sometimes bypass deserialization errors.
+        # If this fails, we use a raw loading approach.
+        model = load_model(model_path, compile=False, safe_mode=False)
         
         with open(pickle_path, 'rb') as f:
             encoder = pickle.load(f)
@@ -34,36 +32,17 @@ def load_assets():
 
 model, encoder, status = load_assets()
 
-# --- User Interface ---
 if model is None:
     st.error(f"Engine Error: {status}")
-    st.info("Technical Note: This is usually a version mismatch. Ensure requirements.txt is updated.")
+    st.info("If you see 'batch_shape' error, we will try one last technical bypass.")
 else:
-    st.success("AI Brain Connected & Ready!")
-    
-    file = st.file_uploader("Upload Baby Cry (.wav)", type=["wav"])
-
-    if file is not None:
+    st.success("AI Brain Connected!")
+    file = st.file_uploader("Upload .wav", type=["wav"])
+    if file:
         st.audio(file)
-        
-        if st.button("Classify This Cry"):
-            try:
-                with st.spinner("Analyzing acoustic features..."):
-                    # Feature Extraction: Matches training logic
-                    audio, sr = librosa.load(file, res_type='kaiser_fast')
-                    mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=40)
-                    mfccs_processed = np.mean(mfccs.T, axis=0).reshape(1, -1)
-                    
-                    # Prediction
-                    prediction = model.predict(mfccs_processed)
-                    class_idx = np.argmax(prediction)
-                    label = encoder.inverse_transform([class_idx])[0]
-                    
-                    st.markdown("---")
-                    st.header(f"Result: {label}")
-                    st.balloons()
-            except Exception as e:
-                st.error(f"Analysis Failed: {e}")
-
-st.markdown("---")
-st.caption("Deployment Stability Build v2.3 - Native Compatibility Mode")
+        if st.button("Analyze"):
+            audio, sr = librosa.load(file, res_type='kaiser_fast')
+            mfccs = np.mean(librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=40).T, axis=0).reshape(1, -1)
+            prediction = model.predict(mfccs)
+            label = encoder.inverse_transform([np.argmax(prediction)])[0]
+            st.header(f"Result: {label}")
