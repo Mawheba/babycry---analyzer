@@ -1,197 +1,72 @@
 import streamlit as st
 import librosa
 import numpy as np
-import pickle
 import tensorflow as tf
-from tensorflow import keras
+from tensorflow.keras.models import load_model
+import pickle
+import os
 
-# Page configuration
-st.set_page_config(
-    page_title="Infant Cry Classifier",
-    page_icon="👶",
-    layout="centered"
-)
+# Set Page Title
+st.set_page_config(page_title="Baby Cry Analyzer", page_icon="👶")
 
-# Custom CSS for better styling
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: bold;
-        text-align: center;
-        color: #FF6B6B;
-        margin-bottom: 1rem;
-    }
-    .prediction-box {
-        background-color: #f0f2f6;
-        padding: 2rem;
-        border-radius: 10px;
-        text-align: center;
-        margin: 2rem 0;
-    }
-    .prediction-label {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #4CAF50;
-    }
-    .info-text {
-        font-size: 1.1rem;
-        color: #666;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    </style>
-""", unsafe_allow_html=True)
+st.title("👶 Infant Cry Classification System")
+st.markdown("---")
 
-# Load model and label encoder with caching
+# --- 1. Load the Model and Encoder ---
+# We use st.cache_resource so the model stays in memory and doesn't reload every time
 @st.cache_resource
-def load_model_and_encoder():
-    """Load the pre-trained model and label encoder"""
+def load_assets():
     try:
-        # Load model without compiling to avoid batch_shape errors
-        model = tf.keras.models.load_model(
-            'infant_cry_classification_model.h5',
-            compile=False
-        )
-        
-        # Load label encoder
+        # Loading the Brain (Neural Network)
+        model = load_model('infant_cry_classification_model.h5')
+        # Loading the Translator (Label Encoder)
         with open('label_encoder.pkl', 'rb') as f:
-            label_encoder = pickle.load(f)
-        
-        return model, label_encoder
+            encoder = pickle.load(f)
+        return model, encoder
     except Exception as e:
-        st.error(f"Error loading model or label encoder: {str(e)}")
+        st.error(f"Error loading model files: {e}")
         return None, None
 
-def extract_mfcc_features(audio_file):
-    """
-    Extract MFCC features from audio file
-    
-    Parameters:
-    -----------
-    audio_file : UploadedFile
-        The uploaded audio file
-    
-    Returns:
-    --------
-    numpy.ndarray
-        MFCC features of shape (1, 40)
-    """
-    try:
-        # Load audio file using librosa
-        audio_data, sample_rate = librosa.load(audio_file, sr=None)
-        
-        # Extract 40 MFCCs
-        mfccs = librosa.feature.mfcc(y=audio_data, sr=sample_rate, n_mfcc=40)
-        
-        # Calculate mean across time axis to get 1D vector of shape (40,)
-        mfcc_mean = np.mean(mfccs, axis=1)
-        
-        # Reshape to (1, 40) for model input
-        mfcc_features = mfcc_mean.reshape(1, 40)
-        
-        return mfcc_features
-    except Exception as e:
-        st.error(f"Error extracting features: {str(e)}")
-        return None
+with st.spinner('Initializing AI Engine... This may take a minute.'):
+    model, encoder = load_assets()
 
-def predict_cry_type(model, label_encoder, features):
-    """
-    Predict the type of infant cry
-    
-    Parameters:
-    -----------
-    model : keras.Model
-        The loaded Keras model
-    label_encoder : LabelEncoder
-        The loaded label encoder
-    features : numpy.ndarray
-        MFCC features of shape (1, 40)
-    
-    Returns:
-    --------
-    str
-        The predicted cry type
-    """
-    try:
-        # Make prediction
-        prediction = model.predict(features, verbose=0)
-        
-        # Get predicted class index
-        predicted_class_idx = np.argmax(prediction, axis=1)[0]
-        
-        # Decode the label
-        predicted_label = label_encoder.inverse_transform([predicted_class_idx])[0]
-        
-        return predicted_label
-    except Exception as e:
-        st.error(f"Error making prediction: {str(e)}")
-        return None
+# --- 2. Feature Extraction Function ---
+def extract_features(audio_file):
+    # This matches the 40 MFCCs from your Colab training
+    audio, sample_rate = librosa.load(audio_file, res_type='kaiser_fast')
+    mfccs_features = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=40)
+    mfccs_scaled_features = np.mean(mfccs_features.T, axis=0)
+    return mfccs_scaled_features.reshape(1, -1)
 
-# Main application
-def main():
-    # Header
-    st.markdown('<p class="main-header">👶 Infant Cry Classification</p>', unsafe_allow_html=True)
-    st.markdown('<p class="info-text">Upload an audio file to classify the type of infant cry</p>', unsafe_allow_html=True)
+# --- 3. User Interface ---
+st.write("### 1. Upload Audio")
+uploaded_file = st.file_uploader("Choose a baby cry recording (.wav)", type=["wav"])
+
+if uploaded_file is not None:
+    # Play the uploaded audio back to the user
+    st.audio(uploaded_file, format='audio/wav')
     
-    # Load model and encoder
-    model, label_encoder = load_model_and_encoder()
-    
-    if model is None or label_encoder is None:
-        st.error("⚠️ Could not load model or label encoder. Please ensure the files exist in the same directory.")
-        st.info("Required files: `infant_cry_classification_model.h5` and `label_encoder.pkl`")
-        return
-    
-    # File uploader
-    st.markdown("### 📁 Upload Audio File")
-    uploaded_file = st.file_uploader(
-        "Choose a WAV file",
-        type=['wav'],
-        help="Upload a .wav audio file of an infant crying"
-    )
-    
-    if uploaded_file is not None:
-        # Display audio player
-        st.markdown("### 🔊 Audio Playback")
-        st.audio(uploaded_file, format='audio/wav')
-        
-        # Add a divider
-        st.markdown("---")
-        
-        # Process button
-        if st.button("🔍 Classify Cry", type="primary", use_container_width=True):
-            with st.spinner("Analyzing audio..."):
-                # Extract features
-                features = extract_mfcc_features(uploaded_file)
+    st.write("### 2. Analysis")
+    if st.button('Classify This Cry'):
+        if model is not None:
+            with st.spinner('Extracting acoustic fingerprints...'):
+                # Step 1: Extract MFCCs
+                features = extract_features(uploaded_file)
                 
-                if features is not None:
-                    # Make prediction
-                    prediction = predict_cry_type(model, label_encoder, features)
-                    
-                    if prediction is not None:
-                        # Display prediction
-                        st.markdown("### 🎯 Classification Result")
-                        st.markdown(f"""
-                            <div class="prediction-box">
-                                <p style="font-size: 1.2rem; color: #666; margin-bottom: 0.5rem;">
-                                    The infant cry is classified as:
-                                </p>
-                                <p class="prediction-label">{prediction}</p>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Success animation
-                        st.balloons()
-                        st.success("✅ Classification completed successfully!")
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("""
-        <div style="text-align: center; color: #888; font-size: 0.9rem;">
-            <p>💡 This application uses deep learning to classify infant cries</p>
-            <p>Supported categories may include: Hungry, Pain, Tired, and more</p>
-        </div>
-    """, unsafe_allow_html=True)
+                # Step 2: Prediction
+                prediction_logits = model.predict(features)
+                prediction_class = np.argmax(prediction_logits, axis=1)
+                
+                # Step 3: Decode Label
+                result = encoder.inverse_transform(prediction_class)[0]
+                
+                # Step 4: Display Result
+                st.success(f"## Prediction: {result}")
+                
+                # Add helpful context for the presentation
+                st.info(f"The model identified patterns consistent with the '{result}' category.")
+        else:
+            st.error("Model not loaded. Check if the .h5 file is in the GitHub repository.")
 
-if __name__ == "__main__":
-    main()
+st.markdown("---")
+st.caption("Technical Note: This system uses a Deep Neural Network to analyze 40-dimensional MFCC vectors.")
