@@ -1,4 +1,6 @@
-tensorflow-cpu==2.15.0
+tensorflow==2.16.1
 librosa==0.10.1
 numpy<2.0.0
 scikit-learn
+streamlit
+matplotlib
